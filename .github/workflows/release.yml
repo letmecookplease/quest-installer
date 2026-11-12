@@ -1,0 +1,155 @@
+name: Quest Installer release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-x64
+            runner: windows-2025
+            bundle: nsis
+            extension: exe
+          - platform: macos-apple-silicon
+            runner: macos-15
+            bundle: dmg
+            extension: dmg
+            target: aarch64-apple-darwin
+            architecture: arm64
+          - platform: macos-intel
+            runner: macos-15-intel
+            bundle: dmg
+            extension: dmg
+            target: x86_64-apple-darwin
+            architecture: x86_64
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Select stable Rust
+        shell: bash
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: "platform-tools build-tools;35.0.0"
+
+      - name: Check versions
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $bundleVersion = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          if ($version -ne $bundleVersion) { throw 'Package and Tauri versions differ.' }
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$version") {
+            throw 'The release tag must match the app version.'
+          }
+
+      - name: Install app dependencies
+        run: npm ci
+
+      - name: Stage Android tools
+        run: npm run stage-tools
+
+      - name: Verify native Mac Android tools
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          SDK_TARGET: ${{ matrix.target }}
+          SDK_ARCH: ${{ matrix.architecture }}
+        run: |
+          for tool in adb aapt2; do
+            binary="src-tauri/binaries/$tool-$SDK_TARGET"
+            lipo -verify_arch "$SDK_ARCH" "$binary"
+            "$binary" version
+          done
+
+      - name: Build frontend for tests
+        run: npm run build
+
+      - name: Run Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml --release --locked --features tauri/custom-protocol
+
+      - name: Package Windows
+        if: runner.os == 'Windows'
+        run: npm run tauri -- build --ci --bundles nsis --no-sign
+
+      - name: Package macOS
+        if: runner.os == 'macOS'
+        env:
+          APPLE_SIGNING_IDENTITY: "-"
+        run: npm run tauri -- build --ci --bundles dmg
+
+      - name: Collect installer
+        shell: pwsh
+        env:
+          BUNDLE: ${{ matrix.bundle }}
+          EXTENSION: ${{ matrix.extension }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $directory = Join-Path 'src-tauri/target/release/bundle' $env:BUNDLE
+          $files = @(Get-ChildItem -LiteralPath $directory -File -Filter "*.$env:EXTENSION")
+          if ($files.Count -ne 1) { throw "Expected one installer, found $($files.Count)." }
+          New-Item -ItemType Directory -Path release-assets | Out-Null
+          Copy-Item -LiteralPath $files[0].FullName -Destination "release-assets/Quest-Installer-$version-$env:PLATFORM.$env:EXTENSION"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: installer-${{ matrix.platform }}
+          path: release-assets/*
+          if-no-files-found: error
+          compression-level: 0
+
+  publish:
+    name: Publish the three installers
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: installer-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Publish GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          cd release-assets
+          assets=(
+            "Quest-Installer-$version-windows-x64.exe"
+            "Quest-Installer-$version-macos-apple-silicon.dmg"
+            "Quest-Installer-$version-macos-intel.dmg"
+          )
+          sha256sum -- "${assets[@]}" > SHA256SUMS.txt
+          gh release create "$GITHUB_REF_NAME" "${assets[@]}" SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" --verify-tag --title "Quest Installer $GITHUB_REF_NAME" \
+            --notes 'Download the installer for your operating system and processor. The Mac builds are signed ad hoc and may require approval in Privacy & Security.'

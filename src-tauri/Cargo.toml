@@ -1,0 +1,17 @@
+[package]
+name = "quest-installer"
+version = "0.3.7"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["fs", "process", "time", "io-util", "sync", "macros", "net"] }
+tempfile = "3"
+zip = { version = "4", default-features = false, features = ["deflate"] }
+base64 = "0.22"

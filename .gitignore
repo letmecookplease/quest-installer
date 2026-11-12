@@ -1,0 +1,7 @@
+/.toolchain/
+/node_modules/
+/dist/
+/src-tauri/target/
+/src-tauri/binaries/
+/src-tauri/gen/
+/quest-installer-preview.html

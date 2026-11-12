@@ -1,0 +1,9 @@
+{
+  "bundle": {
+    "targets": ["nsis"],
+    "resources": {
+      "binaries/AdbWinApi.dll": "AdbWinApi.dll",
+      "binaries/AdbWinUsbApi.dll": "AdbWinUsbApi.dll"
+    }
+  }
+}

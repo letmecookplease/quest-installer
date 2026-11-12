@@ -1,0 +1,30 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Quest Installer",
+  "version": "0.3.7",
+  "identifier": "com.questinstaller.desktop",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "devUrl": "http://127.0.0.1:1420",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [{"title": "Quest Installer", "width": 1200, "height": 780, "minWidth": 760, "minHeight": 570}],
+    "security": {
+      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' data:; style-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'none'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "useLocalToolsDir": true,
+    "externalBin": ["binaries/adb", "binaries/aapt2"],
+    "resources": {
+      "binaries/Android-Platform-Tools.txt": "licenses/Android-Platform-Tools.txt",
+      "binaries/Android-Build-Tools.txt": "licenses/Android-Build-Tools.txt",
+      "../node_modules/@fontsource-variable/fira-code/LICENSE": "licenses/FiraCode.txt"
+    },
+    "icon": ["icons/icon.ico", "icons/icon.icns", "icons/icon.png"],
+    "windows": { "webviewInstallMode": { "type": "skip" } }
+  }
+}
