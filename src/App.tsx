@@ -377,7 +377,6 @@ export function App() {
       <nav className="navigation" aria-label="Workspace">
         {pages.map((item) => <button key={item} aria-current={item === page ? "page" : undefined} disabled={!!busy} onClick={() => go(item)}>{item}</button>)}
       </nav>
-      <span className="mega-particle-mark" role="img" aria-label="Mega Particle" />
     </header>
     <aside className="sidebar" aria-labelledby="headsets-label">
       <h2 className="label" id="headsets-label">Headsets</h2>
@@ -525,7 +524,7 @@ export function App() {
           {filesLoading ? <p className="muted" role="status">Reading folder…</p> : !fileError && <>
             <label className="check"><input type="checkbox" checked={reveal} onChange={(event) => setReveal(event.target.checked)} />Open folder after download</label>
             {!files.length ? <p className="empty-state">This folder is empty. Drop files here to upload.</p> :
-              <div className="file-scroll"><table><thead><tr><th>Name</th><th>Size</th><th>Modified</th><th>Actions</th></tr></thead>
+              <div className="file-scroll"><table className="files-table"><thead><tr><th>Name</th><th>Size</th><th>Modified</th><th>Actions</th></tr></thead>
                 <tbody>{files.map((entry) => <tr key={entry.name}>
                   <td>{entry.directory ? <button className="button quiet mono" disabled={!!busy} onClick={() => browse(`${path}/${entry.name}`)}>{entry.name}/</button>
                     : /\.(png|jpe?g|webp)$/i.test(entry.name) ? <button className="button quiet mono" disabled={!!busy} onClick={() => void work("Opening preview…", async () => {

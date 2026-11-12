@@ -4,8 +4,6 @@ An offline Tauri desktop app for installing and testing Unity builds on Meta Que
 
 Settings stores the theme, headset names, watched folder, and recent builds locally. Dark is the default. All themes use bundled Fira Code at 450 for body text, 500 for controls and card titles, and 700 for page headings and emphasis. To add a theme, extend the theme definitions in `src/model.ts`, the color tokens in `src/styles.css`, and the allowed IDs in the `set_theme` command.
 
-The header uses the active theme’s accent color for the bundled [Mega Particle symbol](https://www.megaparticle.com/).
-
 ## Build
 
 Install Node.js, the Rust stable toolchain, the [Tauri host prerequisites](https://v2.tauri.app/start/prerequisites/), and Android SDK Platform-Tools and Build-Tools 35.0.0. Set `ANDROID_SDK_ROOT` when the SDK is outside the usual location. `QUEST_AAPT2` can point to another compatible AAPT2 binary.
