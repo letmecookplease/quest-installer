@@ -2,12 +2,20 @@ name: Quest Installer release
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing version tag to build and publish
+        type: string
+        required: false
   push:
     tags:
       - "v*"
 
 permissions:
   contents: read
+
+env:
+  RELEASE_TAG: ${{ inputs.release_tag || (github.ref_type == 'tag' && github.ref_name || '') }}
 
 jobs:
   build:
@@ -36,6 +44,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
 
       - uses: actions/setup-node@v6
         with:
@@ -63,7 +73,7 @@ jobs:
           $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
           $bundleVersion = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
           if ($version -ne $bundleVersion) { throw 'Package and Tauri versions differ.' }
-          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$version") {
+          if ($env:RELEASE_TAG -and $env:RELEASE_TAG -ne "v$version") {
             throw 'The release tag must match the app version.'
           }
 
@@ -82,7 +92,7 @@ jobs:
         run: |
           for tool in adb aapt2; do
             binary="src-tauri/binaries/$tool-$SDK_TARGET"
-            lipo -verify_arch "$SDK_ARCH" "$binary"
+            lipo "$binary" -verify_arch "$SDK_ARCH"
             "$binary" version
           done
 
@@ -125,7 +135,7 @@ jobs:
 
   publish:
     name: Publish the three installers
-    if: github.ref_type == 'tag'
+    if: github.ref_type == 'tag' || inputs.release_tag != ''
     needs: build
     runs-on: ubuntu-24.04
     permissions:
@@ -142,7 +152,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          version="${RELEASE_TAG#v}"
           cd release-assets
           assets=(
             "Quest-Installer-$version-windows-x64.exe"
@@ -150,6 +160,6 @@ jobs:
             "Quest-Installer-$version-macos-intel.dmg"
           )
           sha256sum -- "${assets[@]}" > SHA256SUMS.txt
-          gh release create "$GITHUB_REF_NAME" "${assets[@]}" SHA256SUMS.txt \
-            --repo "$GITHUB_REPOSITORY" --verify-tag --title "Quest Installer $GITHUB_REF_NAME" \
+          gh release create "$RELEASE_TAG" "${assets[@]}" SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" --verify-tag --title "Quest Installer $RELEASE_TAG" \
             --notes 'Download the installer for your operating system and processor. The Mac builds are signed ad hoc and may require approval in Privacy & Security.'

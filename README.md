@@ -18,7 +18,7 @@ npm run tauri -- build
 
 Build on Windows x64 for the NSIS installer and on each supported macOS architecture for its app and DMG. Stage Android tools for the architecture you are packaging. For local development, run `npm run tauri -- dev` after staging.
 
-The GitHub release workflow packages Windows x64, Apple Silicon, and Intel Mac installers. A manual run produces build artifacts for inspection. Pushing a matching version tag publishes all three installers and their checksums after the builds pass. The Mac packages use ad-hoc signing for internal distribution.
+The GitHub release workflow packages Windows x64, Apple Silicon, and Intel Mac installers. A manual run produces build artifacts for inspection. Pushing a matching version tag publishes all three installers and their checksums after the builds pass. To retry a release with the latest workflow, run it from `main` with the existing tag as its `release_tag` input. The Mac packages use ad-hoc signing for internal distribution.
 
 The Windows installer uses the system WebView2 Runtime and performs no WebView2 download. Install WebView2 separately if the target PC lacks it. The app bundles ADB and AAPT2 and keeps its ADB server on port 5038.
 
