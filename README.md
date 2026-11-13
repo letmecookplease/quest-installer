@@ -1,6 +1,6 @@
 # Quest Installer
 
-An offline Tauri desktop app for installing and testing Unity builds on Meta Quest. Connect a developer-mode headset, allow USB debugging, then select an APK, ZIP, or build folder. Wireless debugging uses a direct local connection. Device commands are bound to the selected headset.
+An offline Tauri desktop app for installing and testing builds on Meta Quest. Connect a developer-mode headset, allow USB debugging, then select an APK, ZIP, or build folder. Wireless debugging uses a direct local connection. Device commands are bound to the selected headset.
 
 Settings stores the theme, headset names, watched folder, and recent builds locally. Dark is the default. All themes use bundled Fira Code at 450 for body text, 500 for controls and card titles, and 700 for page headings and emphasis. To add a theme, extend the theme definitions in `src/model.ts`, the color tokens in `src/styles.css`, and the allowed IDs in the `set_theme` command.
 

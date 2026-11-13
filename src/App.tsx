@@ -27,7 +27,7 @@ const quickFolders = [
 const pages: Page[] = ["Install", "Apps", "Files", "Logs", "Settings"];
 const buildFilter = [{ name: "Quest builds", extensions: ["apk", "zip"] }];
 const descriptions: Record<Page, string> = {
-  Install: "Send a Unity build to your headset.",
+  Install: "Send a build to your headset.",
   Apps: "See and remove apps installed on your headset.",
   Files: "Browse and transfer files on your headset.",
   Logs: "Stream diagnostics for the selected build.",
