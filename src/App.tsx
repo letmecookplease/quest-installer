@@ -11,6 +11,15 @@ import { Build, DeviceSnapshot, Entry, Failure, InstalledApp, InstallResult, Mod
 import { ErrorMessage, Modal } from "./ui";
 
 const root = "/sdcard";
+const deviceRoot = "/";
+function sharedStorage(path: string) {
+  return path === root || path.startsWith(root + "/");
+}
+
+function filePath(folder: string, name: string) {
+  return folder === deviceRoot ? "/" + name : folder + "/" + name;
+}
+
 const quickFolders = [
   ["OBB", "/sdcard/Android/obb"], ["Data", "/sdcard/Android/data"],
   ["Screenshots", "/sdcard/Oculus/Screenshots"], ["Recordings", "/sdcard/Oculus/VideoShots"],
@@ -56,10 +65,8 @@ export function App() {
   const [appRefresh, setAppRefresh] = useState(0);
   const [inventory, setInventory] = useState<{ serial: string; apps: InstalledApp[]; error?: Failure } | null>(null);
   const [path, setPath] = useState(root);
-  const [files, setFiles] = useState<Entry[]>([]);
-  const [fileError, setFileError] = useState<Failure | null>(null);
-  const [filesLoading, setFilesLoading] = useState(false);
-  const [refresh, setRefresh] = useState(0);
+  const [listing, setListing] = useState<{ serial: string; path: string; entries: Entry[]; error?: Failure } | null>(null);
+  const [fileRefresh, setFileRefresh] = useState(0);
   const [reveal, setReveal] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
   const [streaming, setStreaming] = useState(false);
@@ -72,6 +79,13 @@ export function App() {
   const name = device ? (settings.nicknames[device.serial] || device.name) : "";
   const connection = device?.wireless ? "Wi-Fi" : "USB";
   const modeName = modes.find((item) => item.id === mode)!.label;
+  const currentListing = listing?.serial === selected && listing.path === path ? listing : null;
+  const files = currentListing?.entries ?? [];
+  const fileError = currentListing?.error;
+  const filesLoading = ready && !currentListing;
+  const writableFolder = sharedStorage(path);
+  const fileReady = ready && !!currentListing && !fileError && writableFolder;
+  const pathParts = path.split("/").filter(Boolean);
 
   useEffect(() => {
     const theme = themes.some((option) => option.id === settings.theme) ? settings.theme : "dark";
@@ -126,6 +140,10 @@ export function App() {
 
   useEffect(() => {
     setPath(root);
+    setListing(null);
+  }, [selected, ready]);
+
+  useEffect(() => {
     logSession.current = "";
     setStreaming(false);
     setLogs([]);
@@ -147,15 +165,13 @@ export function App() {
   useEffect(() => {
     if (page !== "Files" || !ready) return;
     let live = true;
-    setFilesLoading(true);
-    setFileError(null);
-    setFiles([]);
     void invoke<Entry[]>("list_files", { serial: selected, path }).then((entries) => {
-      if (live) setFiles(entries);
-    }).catch((cause) => { if (live) setFileError(failure(cause)); })
-      .finally(() => { if (live) setFilesLoading(false); });
+      if (live) setListing({ serial: selected, path, entries });
+    }).catch((cause) => {
+      if (live) setListing({ serial: selected, path, entries: [], error: failure(cause) });
+    });
     return () => { live = false; };
-  }, [page, ready, selected, path, refresh]);
+  }, [page, ready, selected, path, fileRefresh]);
 
   useEffect(() => {
     if (streaming && logView.current) logView.current.scrollTop = logView.current.scrollHeight;
@@ -237,15 +253,20 @@ export function App() {
     });
   }
 
+  function refreshFiles() {
+    setListing(null);
+    setFileRefresh((count) => count + 1);
+  }
+
   function browse(next: string) {
+    refreshFiles();
     setPath(next);
-    setFileError(null);
     setError(null);
   }
 
   async function transfer(action: string, input: { name?: string; newName?: string; local?: string } = {}) {
     await invoke("file_action", { serial: selected, path, action, reveal, ...input });
-    setRefresh((count) => count + 1);
+    if (action !== "pull") refreshFiles();
   }
 
   function upload() {
@@ -266,7 +287,7 @@ export function App() {
     if (prompt || !paths.length) return;
     if (page === "Install") {
       void work("Reading build…", () => inspect(paths[0]));
-    } else if (page === "Files" && ready && !fileError && !filesLoading) {
+    } else if (page === "Files" && fileReady) {
       void work("Uploading…", async () => {
         for (const local of paths) await transfer("push", { local });
         setNotice("Upload complete.");
@@ -362,12 +383,12 @@ export function App() {
 
   function go(next: Page) {
     if (next === "Apps" && page !== next) setInventory(null);
+    if (next === "Files" && page !== next) setListing(null);
     setPage(next);
     setError(null);
     setNotice("");
   }
 
-  const fileReady = ready && !filesLoading && !fileError;
   const promptTargetLost = !!prompt && "serial" in prompt && (prompt.serial !== selected || !ready);
   const selectedInventory = inventory?.serial === selected ? inventory : null;
   const visibleApps = selectedInventory?.apps.filter((app) => app.package.toLowerCase().includes(appQuery.trim().toLowerCase())) ?? [];
@@ -511,31 +532,42 @@ export function App() {
       {page === "Files" && <section className={`panel panel-body ${dragging && fileReady ? "is-over" : ""}`} aria-label="Headset files">
         {!ready ? <p className="muted">Connect a headset to browse its storage.</p> : <>
           <nav className="button-row breadcrumb" aria-label="Folder path">
-            {path.split("/").filter(Boolean).map((part, index, parts) => <button className="button quiet" disabled={!!busy}
-              aria-current={index === parts.length - 1 ? "location" : undefined} key={index}
-              onClick={() => browse("/" + parts.slice(0, index + 1).join("/"))}>{part === "sdcard" ? "Internal storage" : part}</button>)}
+            <button className="button quiet" disabled={!!busy} aria-current={path === deviceRoot ? "location" : undefined}
+              onClick={() => browse(deviceRoot)}>Device root</button>
+            {pathParts.map((part, index) => <button className="button quiet" disabled={!!busy}
+              aria-current={index === pathParts.length - 1 ? "location" : undefined} key={index}
+              onClick={() => browse("/" + pathParts.slice(0, index + 1).join("/"))}>
+              <span className="breadcrumb-divider" aria-hidden="true">/</span>
+              {index === 0 && part === "sdcard" ? "Internal storage" : part}
+            </button>)}
           </nav>
           <div className="files-toolbar">
-            <div className="button-row">{quickFolders.map(([label, next]) => <button className="button" key={label} disabled={!!busy} onClick={() => browse(next)}>{label}</button>)}</div>
-            <div className="button-row"><button className="button" disabled={!!busy || !fileReady} onClick={() => openPrompt({ kind: "mkdir", serial: selected })}>New folder</button>
+            <div className="button-row">
+              {quickFolders.map(([label, next]) => <button className="button" key={label} disabled={!!busy} onClick={() => browse(next)}>{label}</button>)}
+              <button className="button" disabled={!!busy} onClick={() => browse(path)}>Refresh</button>
+            </div>
+            {writableFolder ? <div className="button-row"><button className="button" disabled={!!busy || !fileReady} onClick={() => openPrompt({ kind: "mkdir", serial: selected })}>New folder</button>
               <button className="button primary" disabled={!!busy || !fileReady} onClick={upload}>Upload files</button></div>
+              : <button className="button" disabled={!!busy} onClick={() => browse(root)}>Internal storage</button>}
           </div>
-          {fileError && <ErrorMessage error={fileError} />}
+          {fileError && <div className="below"><ErrorMessage error={fileError} /></div>}
           {filesLoading ? <p className="muted" role="status">Reading folder…</p> : !fileError && <>
             <label className="check"><input type="checkbox" checked={reveal} onChange={(event) => setReveal(event.target.checked)} />Open folder after download</label>
-            {!files.length ? <p className="empty-state">This folder is empty. Drop files here to upload.</p> :
+            {!files.length ? <p className="empty-state">This folder is empty.{writableFolder && " Drop files here to upload."}</p> :
               <div className="file-scroll"><table className="files-table"><thead><tr><th>Name</th><th>Size</th><th>Modified</th><th>Actions</th></tr></thead>
                 <tbody>{files.map((entry) => <tr key={entry.name}>
-                  <td>{entry.directory ? <button className="button quiet mono" disabled={!!busy} onClick={() => browse(`${path}/${entry.name}`)}>{entry.name}/</button>
-                    : /\.(png|jpe?g|webp)$/i.test(entry.name) ? <button className="button quiet mono" disabled={!!busy} onClick={() => void work("Opening preview…", async () => {
+                  <td>{entry.directory ? <button className="button quiet mono" disabled={!!busy} onClick={() => browse(filePath(path, entry.name))}>{entry.name}/</button>
+                    : entry.regular && /\.(png|jpe?g|webp)$/i.test(entry.name) ? <button className="button quiet mono" disabled={!!busy} onClick={() => void work("Opening preview…", async () => {
                       const data = await invoke<string>("preview_image", { serial: selected, path, name: entry.name });
                       openPrompt({ kind: "preview", name: entry.name, data });
                     })}>{entry.name}</button> : <span className="mono">{entry.name}</span>}</td>
                   <td className="mono">{formatSize(entry.size)}</td><td className="mono">{entry.modified}</td>
                   <td><div className="button-row file-actions">
-                    <button className="button quiet" aria-label={`Download ${entry.name}`} disabled={!!busy} onClick={() => download(entry)}>Download</button>
-                    <button className="button quiet" aria-label={`Rename ${entry.name}`} disabled={!!busy} onClick={() => openPrompt({ kind: "rename", entry, serial: selected, device: name }, entry.name)}>Rename</button>
-                    <button className="button quiet" aria-label={`Delete ${entry.name}`} disabled={!!busy} onClick={() => openPrompt({ kind: "delete", entry, serial: selected, device: name })}>Delete</button>
+                    {(entry.regular || (writableFolder && entry.directory)) && <button className="button quiet" aria-label={`Download ${entry.name}`} disabled={!!busy} onClick={() => download(entry)}>Download</button>}
+                    {writableFolder && <>
+                      <button className="button quiet" aria-label={`Rename ${entry.name}`} disabled={!!busy} onClick={() => openPrompt({ kind: "rename", entry, serial: selected, device: name }, entry.name)}>Rename</button>
+                      <button className="button quiet" aria-label={`Delete ${entry.name}`} disabled={!!busy} onClick={() => openPrompt({ kind: "delete", entry, serial: selected, device: name })}>Delete</button>
+                    </>}
                   </div></td>
                 </tr>)}</tbody></table></div>}
           </>}

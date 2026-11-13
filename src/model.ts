@@ -34,7 +34,7 @@ export interface Progress {
   transfer: { sent: number; total: number } | null;
 }
 export interface InstallResult { history: History[]; notice: string | null }
-export interface Entry { name: string; directory: boolean; size: number | null; modified: string }
+export interface Entry { name: string; directory: boolean; regular: boolean; size: number | null; modified: string }
 export interface Failure { code: string; message: string; raw: string | null }
 
 export const defaultSettings: Settings = { theme: "dark", watchedFolder: null, nicknames: {}, history: [] };

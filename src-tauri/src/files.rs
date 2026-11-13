@@ -16,9 +16,12 @@ use tauri::State;
 pub struct Entry {
     name: String,
     directory: bool,
+    regular: bool,
     size: Option<u64>,
     modified: String,
 }
+
+const SHARED_STORAGE: &str = "/sdcard";
 
 fn valid_name(name: &str) -> bool {
     !name.is_empty()
@@ -28,17 +31,14 @@ fn valid_name(name: &str) -> bool {
 }
 
 fn remote(path: &str) -> Result<&str> {
-    if path == "/sdcard"
+    if path == "/"
         || path
-            .strip_prefix("/sdcard/")
+            .strip_prefix('/')
             .is_some_and(|suffix| suffix.split('/').all(valid_name))
     {
         Ok(path)
     } else {
-        Err(AppError::new(
-            "input",
-            "Choose a path within headset storage.",
-        ))
+        Err(AppError::new("input", "Choose a valid headset path."))
     }
 }
 
@@ -46,32 +46,81 @@ fn child(path: &str, name: &str) -> Result<String> {
     if !valid_name(name) {
         return Err(AppError::new("input", "Enter a valid file or folder name."));
     }
-    Ok(format!("{path}/{name}"))
+    Ok(format!("{}/{name}", path.trim_end_matches('/')))
+}
+
+fn within(path: &str, base: &str) -> bool {
+    path == base
+        || path
+            .strip_prefix(base)
+            .is_some_and(|rest| rest.starts_with('/'))
+}
+
+fn listing_command(path: &str) -> String {
+    format!("cd -- {} && LC_ALL=C ls -lAbnL -- .", quote(path))
+}
+
+fn field<'a>(rest: &mut &'a str) -> Option<&'a str> {
+    let (value, remainder) = rest.trim_start().split_once(char::is_whitespace)?;
+    *rest = remainder;
+    Some(value)
+}
+
+fn listed_name(name: &str) -> Option<String> {
+    let mut result = Vec::with_capacity(name.len());
+    let mut bytes = name.bytes();
+    while let Some(byte) = bytes.next() {
+        if byte != b'\\' {
+            result.push(byte);
+            continue;
+        }
+        match bytes.next()? {
+            b' ' => result.push(b' '),
+            // Toybox uses octal escapes for bytes that cannot be printed.
+            first @ b'0'..=b'3' => {
+                let second = bytes.next()?.checked_sub(b'0').filter(|digit| *digit < 8)?;
+                let third = bytes.next()?.checked_sub(b'0').filter(|digit| *digit < 8)?;
+                result.push((first - b'0') * 64 + second * 8 + third);
+            }
+            _ => return None,
+        }
+    }
+    let result = String::from_utf8(result).ok()?;
+    (valid_name(&result) && !result.contains('\u{fffd}')).then_some(result)
 }
 
 fn parse_entry(line: &str) -> Option<Entry> {
     let mut rest = line;
-    let mut fields = Vec::with_capacity(7);
-    for _ in 0..7 {
-        rest = rest.trim_start();
-        let (field, remainder) = rest.split_once(char::is_whitespace)?;
-        fields.push(field);
-        rest = remainder;
-    }
-    let name = rest;
-    let directory = match fields[0].chars().next()? {
-        'd' => true,
-        '-' => false,
-        _ => return None,
-    };
-    if !valid_name(name) {
+    let mode = field(&mut rest)?;
+    let kind = mode.as_bytes().first().copied()?;
+    if !b"d-lbcps?".contains(&kind) {
         return None;
     }
+    for _ in 0..3 {
+        field(&mut rest)?;
+    }
+    let size = field(&mut rest)?;
+    if matches!(kind, b'b' | b'c') && size.ends_with(',') {
+        field(&mut rest)?;
+    }
+    let date = field(&mut rest)?;
+    let time = field(&mut rest)?;
+    let name = if kind == b'l' {
+        rest.split_once(" -> ").map_or(rest, |(name, _)| name)
+    } else {
+        rest
+    };
+    let regular = kind == b'-' && !mode.contains('?');
     Some(Entry {
-        name: name.to_owned(),
-        directory,
-        size: (!directory).then(|| fields[4].parse().ok()).flatten(),
-        modified: format!("{} {}", fields[5], fields[6]),
+        name: listed_name(name)?,
+        directory: kind == b'd',
+        regular,
+        size: if regular { size.parse().ok() } else { None },
+        modified: if date == "?" {
+            "—".into()
+        } else {
+            format!("{date} {time}")
+        },
     })
 }
 
@@ -85,15 +134,12 @@ pub async fn list_files(
     let path = remote(&path)?;
     let listing = state
         .adb
-        .shell(&serial, &format!("ls -la -- {}", quote(path)))
+        .shell(&serial, &listing_command(path))
         .await
         .map_err(|error| {
-            if path.starts_with("/sdcard/Android/data") {
+            if error.code == "permission" {
                 AppError {
-                    message: format!(
-                        "Android/data could not be opened on this headset. {}",
-                        error.message
-                    ),
+                    message: format!("The headset denied access to {path}."),
                     ..error
                 }
             } else {
@@ -128,6 +174,24 @@ pub async fn file_action(
     let path = remote(&path)?;
     let adb = &state.adb;
     let name = name.as_deref().unwrap_or_default();
+    if matches!(action.as_str(), "mkdir" | "rename" | "delete" | "push") {
+        if !within(path, SHARED_STORAGE) {
+            return Err(AppError::new(
+                "permission",
+                "Edit files from Internal storage.",
+            ));
+        }
+        let shared = adb.shell(&serial, "readlink -f -- /sdcard").await?;
+        let directory = adb
+            .shell(&serial, &format!("readlink -f -- {}", quote(path)))
+            .await?;
+        if shared == "/" || remote(&shared).is_err() || !within(&directory, &shared) {
+            return Err(AppError::new(
+                "permission",
+                "This folder points outside Internal storage.",
+            ));
+        }
+    }
     match action.as_str() {
         "mkdir" => {
             let target = child(path, name)?;
@@ -173,6 +237,19 @@ pub async fn file_action(
         "pull" => {
             let local = local_file(local)?;
             let from = child(path, name)?;
+            if cfg!(windows) && !windows_filename(name) {
+                return Err(AppError::new(
+                    "input",
+                    "Windows cannot save this file name.",
+                ));
+            }
+            let source = quote(&from);
+            let allowed = if within(path, SHARED_STORAGE) {
+                format!("[ -f {source} ] || [ -d {source} ]")
+            } else {
+                format!("[ -f {source} ]")
+            };
+            adb.shell(&serial, &format!("{allowed} || {{ echo 'Only ordinary files and shared folders can be downloaded' >&2; exit 1; }}")).await?;
             if !local.is_dir() {
                 return Err(AppError::new(
                     "input",
@@ -209,6 +286,26 @@ pub async fn file_action(
     Ok(())
 }
 
+fn windows_filename(name: &str) -> bool {
+    let stem = name
+        .split('.')
+        .next()
+        .unwrap_or_default()
+        .trim_end()
+        .to_ascii_uppercase();
+    !name.contains(['<', '>', ':', '"', '|', '?', '*'])
+        && !name.ends_with([' ', '.'])
+        && !matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        && !["COM", "LPT"].iter().any(|prefix| {
+            stem.strip_prefix(prefix).is_some_and(|suffix| {
+                matches!(
+                    suffix,
+                    "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "¹" | "²" | "³"
+                )
+            })
+        })
+}
+
 fn local_file(path: Option<PathBuf>) -> Result<PathBuf> {
     let path = path.ok_or_else(|| AppError::new("input", "Choose a local path."))?;
     require_absolute(&path)?;
@@ -235,15 +332,41 @@ mod tests {
     use super::*;
 
     #[test]
-    fn preserves_remote_names_and_limits_paths_to_shared_storage() {
+    fn preserves_remote_names_and_rejects_traversal() {
         let entry =
-            parse_entry("-rw-rw---- 1 root everybody 42 2026-11-12 08:30  Screenshot 1.png")
-                .unwrap();
+            parse_entry(r"-rw-rw---- 1 0 9997 42 2026-11-12 08:30 \ Screenshot\ 1.png").unwrap();
         assert_eq!(entry.name, " Screenshot 1.png");
         assert_eq!(entry.size, Some(42));
         assert!(remote("/sdcard/Oculus/Screenshots").is_ok());
+        assert!(remote("/").is_ok());
+        assert!(remote("/system/etc").is_ok());
         assert!(remote("/sdcard/../data").is_err());
+        assert!(remote("/system//etc").is_err());
         assert!(child("/sdcard", "../data").is_err());
+        assert_eq!(child("/", "system").unwrap(), "/system");
+        assert!(!within("/sdcard2", SHARED_STORAGE));
+        assert!(!windows_filename("report:other"));
+        assert!(!windows_filename("COM1.txt"));
+        assert!(windows_filename("Screenshot 1.png"));
+    }
+
+    #[test]
+    fn lists_storage_aliases_and_system_entries() {
+        let cmd = listing_command("/sdcard");
+        assert_eq!(cmd, "cd -- '/sdcard' && LC_ALL=C ls -lAbnL -- .");
+        let folder = parse_entry("drwxrwx--- 2 0 9997 3488 2023-04-27 03:53 Android").unwrap();
+        assert!(folder.directory);
+        let locked = parse_entry("d????????? ? ? ? ? ? ? data_mirror").unwrap();
+        assert!(locked.directory);
+        assert_eq!(locked.modified, "—");
+        let link =
+            parse_entry("lrw-r--r-- 1 0 0 17 2009-01-01 05:00 d -> /sys/kernel/debug").unwrap();
+        assert_eq!(link.name, "d");
+        assert!(!link.regular);
+        let device =
+            parse_entry("crw-rw-r-- 1 1000 1000 504, 0 1970-01-01 08:45 adsprpc-smd").unwrap();
+        assert_eq!(device.name, "adsprpc-smd");
+        assert!(!device.regular);
     }
 }
 
@@ -267,10 +390,10 @@ pub async fn preview_image(
             ))
         }
     };
-    let size = state
-        .adb
-        .shell(&serial, &format!("stat -c %s -- {}", quote(&from)))
-        .await?;
+    let target = quote(&from);
+    let size = state.adb.shell(&serial, &format!(
+        "[ -f {target} ] || {{ echo 'This path is not an ordinary file' >&2; exit 1; }}; stat -L -c %s -- {target}"
+    )).await?;
     let limit = 20 * 1024 * 1024;
     if size.trim().parse::<u64>().map_or(true, |size| size > limit) {
         return Err(AppError::new(

@@ -26,6 +26,6 @@ The selected build shows estimated install size and the headset’s current free
 
 Use **Apps** to search installed third-party packages on the selected headset. **Uninstall** shows the exact package, build, and destination before removing it from all profiles. The app verifies cleanup of the package’s Data and OBB folders when the owner profile is active. Quest capture folders are outside the cleanup.
 
-The Files tab shows permission failures from the device, including restricted access to `Android/data`. Clean install can back up readable external app data to the app data directory under `backups`. A requested backup that fails stops the operation before uninstall. Android app-private data is outside the scope of that backup.
+The Files tab opens Internal storage. Choose Device root to browse the headset filesystem with USB or wireless debugging permissions. The browser shows permission errors for protected folders. Upload, rename, delete, and folder creation are available in Internal storage. Clean install can back up readable external app data to the app data directory under `backups`. A requested backup that fails stops the operation before uninstall. Android app-private data is outside the scope of that backup.
 
 Files accepts drag-and-drop uploads. Use a row’s Download action to choose a destination folder. The Logs tab streams the main process of the selected build. Start it again after relaunching the app to attach to its new process.
