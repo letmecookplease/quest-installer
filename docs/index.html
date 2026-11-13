@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Install and test builds on Meta Quest from Windows or Mac. See how to connect your headset, install a build, and browse its files.">
+  <meta name="theme-color" content="#e9eeea">
+  <title>Quest Installer — Quick start</title>
+  <link rel="icon" href="./assets/quest-installer.png" type="image/png">
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <header class="masthead wrap">
+    <a class="wordmark" href="./"><span class="mark" aria-hidden="true"></span>Quest Installer</a>
+    <nav aria-label="Page navigation">
+      <a href="#quick-start">Quick start</a>
+      <a href="https://github.com/letmecookplease/quest-installer">GitHub</a>
+    </nav>
+  </header>
+
+  <main class="wrap">
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <h1 id="hero-title">Install builds<br>on Meta Quest.</h1>
+        <p>Send a build from your PC or Mac. See how much space it needs, follow the transfer, and manage what’s on the headset.</p>
+        <a class="download" href="https://github.com/letmecookplease/quest-installer/releases/latest">Download Quest Installer <span aria-hidden="true">↓</span></a>
+        <p class="platforms">Windows x64 · Apple Silicon · Intel Mac</p>
+      </div>
+      <figure class="app-shot hero-shot">
+        <a href="./assets/install.png" aria-label="Open full-size Install screenshot"><img src="./assets/install.png" width="1200" height="795" alt="Quest Installer’s Install tab with an APK selected, estimated install size, free headset space, and installation modes"></a>
+        <figcaption>Install tab with an example build</figcaption>
+      </figure>
+    </section>
+
+    <section class="setup" id="quick-start" aria-labelledby="setup-title">
+      <h2 id="setup-title">Quick start</h2>
+      <ol>
+        <li><h3>Connect your Quest</h3><p>Enable Developer Mode, plug in your headset over USB, and accept the USB debugging prompt inside the headset.</p></li>
+        <li><h3>Choose a build</h3><p>Drop an APK, ZIP, or build folder into <strong>Install</strong>. Check the destination headset and available space.</p></li>
+        <li><h3>Install and test</h3><p>Choose <strong>Normal</strong> to keep app data or <strong>Clean install</strong> to remove the old copy and its data first. Start the install and watch the transfer.</p></li>
+      </ol>
+      <p class="install-note">On Mac, the installer may require first-launch approval in <strong>System Settings → Privacy &amp; Security</strong>. <a href="https://support.apple.com/en-us/102445">Apple’s instructions</a></p>
+    </section>
+
+    <section class="manage" aria-labelledby="manage-title">
+      <div class="manage-copy">
+        <h2 id="manage-title">On the headset</h2>
+        <dl>
+          <div><dt>Apps</dt><dd>Find installed apps by package ID. Uninstall removes the app, its local data, and expansion files. Quest screenshots and recordings stay in their capture folders.</dd></div>
+          <div><dt>Files</dt><dd>Browse and transfer files in <strong>Internal storage</strong>. Open <strong>Device root</strong> to see the folders your headset allows you to read.</dd></div>
+          <div><dt>Logs</dt><dd>Open the selected build on your Quest, then start the live log in <strong>Logs</strong>. Save the output to share with your team.</dd></div>
+        </dl>
+      </div>
+      <figure class="app-shot">
+        <a href="./assets/files.png" aria-label="Open full-size Files screenshot"><img src="./assets/files.png" width="1200" height="795" alt="Quest Installer’s Files tab showing Internal storage, the Device root shortcut, folders, and file actions" loading="lazy"></a>
+        <figcaption>Files tab with an example storage listing</figcaption>
+      </figure>
+    </section>
+  </main>
+
+  <footer class="footer wrap">
+    <span>Quest Installer</span>
+    <a href="https://github.com/letmecookplease/quest-installer/releases">Release notes</a>
+    <a href="https://github.com/letmecookplease/quest-installer/issues">Report an issue</a>
+  </footer>
+</body>
+</html>
